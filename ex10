@@ -1,0 +1,62 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+#define MAX_MESSAGE_SIZE 128
+
+// Define the message structure
+struct message {
+    long msg_type;
+    char msg_text[MAX_MESSAGE_SIZE];
+};
+
+int main() {
+    key_t key;
+    int msg_queue_id;
+    struct message msg;
+
+    // Generate a unique key for the message queue
+    key = ftok("/tmp", 'A');
+
+    // Create or connect to a message queue
+    msg_queue_id = msgget(key, 0666 | IPC_CREAT);
+    if (msg_queue_id == -1) {
+        perror("msgget");
+        exit(1);
+    }
+
+    // Sender process
+    if (fork() == 0) {
+        // Sender sends a message
+        msg.msg_type = 1;
+        strncpy(msg.msg_text, "Hello, IPC!", MAX_MESSAGE_SIZE);
+
+        if (msgsnd(msg_queue_id, &msg, sizeof(msg.msg_text), 0) == -1) {
+            perror("msgsnd");
+            exit(1);
+        }
+    } else {
+        // Receiver process
+        sleep(1); // Give the sender some time to send the message
+
+        // Receiver receives the message
+        if (msgrcv(msg_queue_id, &msg, sizeof(msg.msg_text), 1, 0) == -1) {
+            perror("msgrcv");
+            exit(1);
+        }
+
+        printf("Received message: %s\n", msg.msg_text);
+
+        // Remove the message queue
+        if (msgctl(msg_queue_id, IPC_RMID, NULL) == -1) {
+            perror("msgctl");
+            exit(1);
+        }
+    }
+
+    return 0;
+}
